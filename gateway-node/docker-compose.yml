@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  gateway-node:
+    build: .
+    container_name: pep-auth-gateway
+    restart: always
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env

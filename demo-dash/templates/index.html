@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Bionica | Risk-MFA Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { background-color: #050505; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; }
+        .cyber-card { background: #0f1115; border: 1px solid #1e293b; transition: all 0.3s ease; }
+        .cyber-card:hover { border-color: #10b981; box-shadow: 0 0 20px rgba(16, 185, 129, 0.1); }
+        .accent-emerald { color: #10b981; }
+        .bg-emerald-glow { background: #10b981; box-shadow: 0 0 15px #10b981; }
+        select, input { background: #050505 !important; border: 1px solid #1e293b !important; color: #10b981 !important; }
+    </style>
+</head>
+<body class="p-4 md:p-12">
+    <div class="max-w-6xl mx-auto">
+        <div class="flex justify-between items-end mb-12 border-b border-zinc-800 pb-6">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tighter">RISK-AUTH <span class="accent-emerald">LAB_TEST</span></h1>
+            </div>
+            <div class="text-right text-xs">
+                <p class="text-zinc-500">статус работы</p>
+                <p class="accent-emerald animate-pulse">● активно</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+            <div class="cyber-card p-8 rounded-2xl">
+                <h2 class="text-xl font-bold mb-6 flex items-center">
+                    <span class="w-2 h-2 bg-emerald-glow rounded-full mr-3"></span>
+                    ВЫХОДНОЙ КОНТЕКСТ
+                </h2>
+                
+                <div class="space-y-6">
+                    <div class="grid grid-cols-1 gap-4">
+                        <div class="flex flex-col">
+                            <label class="text-[10px] text-zinc-500 mb-2">NETWORK_ADDRESS (IP)</label>
+                            <select id="ip" class="p-3 rounded-lg text-sm">
+                                <option value="192.168.1.5">192.168.1.5 [Доверенный]</option>
+                                <option value="45.12.33.101">45.12.33.101 [VPN / Amsterdam]</option>
+                                <option value="92.100.10.5">92.100.10.5 [Владивосток / ASN-882]</option>
+                            </select>
+                        </div>
+
+                        <div class="flex flex-col">
+                            <label class="text-[10px] text-zinc-500 mb-2">DEVICE_FINGERPRINT</label>
+                            <select id="fp" class="p-3 rounded-lg text-sm">
+                                <option value="fp_bionica_macbook">MBP-Bionica (Trusted)</option>
+                                <option value="fp_unknown_iphone">iPhone 15 (Unknown)</option>
+                                <option value="fp_linux_attacker">Kali Linux (Malicious)</option>
+                            </select>
+                        </div>
+
+                        <div class="flex flex-col">
+                            <label class="text-[10px] text-zinc-500 mb-2">GEOGRAPHIC_LOCATION</label>
+                            <select id="location" onchange="updateCoords()" class="p-3 rounded-lg text-sm">
+                                <option value="55.75,37.61">Moscow, RU (Baseline)</option>
+                                <option value="52.36,4.89">Amsterdam, NL (+2,500km)</option>
+                                <option value="43.11,131.88">Vladivostok, RU (+9,000km)</option>
+                            </select>
+                            <div class="flex gap-4 mt-2 text-[10px] text-zinc-500">
+                                <span>LAT: <span id="lat-display">55.75</span></span>
+                                <span>LON: <span id="lon-display">37.61</span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button onclick="performValidation()" class="w-full py-4 rounded-xl border-2 border-emerald-500 accent-emerald font-bold hover:bg-emerald-500 hover:text-black transition-all duration-300">
+                        ОТПРАВИТЬ НА ВЕРИФИКАЦИЮ
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-6">
+                <div id="result-card" class="cyber-card p-8 rounded-2xl hidden">
+                    <div class="flex justify-between items-start mb-6">
+                        <div>
+                            <h3 id="verdict-text" class="text-2xl font-bold"></h3>
+                            <p id="details-text" class="text-xs text-zinc-400 mt-1"></p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[16px] text-zinc-500">RISK_SCORE</p>
+                            <p class="text-[10px] text-zinc-500">Уровень риска</p>
+                            <p id="score-text" class="text-3xl font-bold"></p>
+                        </div>
+                    </div>
+
+                    <div class="h-1 w-full bg-zinc-800 rounded-full overflow-hidden mb-6">
+                        <div id="score-bar" class="h-full transition-all duration-1000"></div>
+                    </div>
+
+                    <div id="reasons-list" class="space-y-2">
+                        </div>
+                </div>
+
+                <div class="cyber-card p-8 rounded-2xl flex-grow flex flex-col items-center justify-center">
+                    <h3 class="text-sm text-zinc-500 mb-6 uppercase tracking-widest">Auth-Challenge (QR)</h3>
+                    <div id="qrcode" class="p-3 bg-white rounded-xl shadow-2xl shadow-emerald-500/10"></div>
+                    <p class="text-[10px] text-zinc-600 mt-6 font-mono">NONCE_TTL: 60s | SHA256_ID: 88AF...C2</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const qr = new QRCode(document.getElementById("qrcode"), {
+            text: "BIONICA_SESSION_INIT_123456789",
+            width: 180,
+            height: 180,
+            colorDark : "#000000",
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.H
+        });
+
+        function updateCoords() {
+            const [lat, lon] = document.getElementById('location').value.split(',');
+            document.getElementById('lat-display').innerText = lat;
+            document.getElementById('lon-display').innerText = lon;
+        }
+
+        async function performValidation() {
+            const [lat, lon] = document.getElementById('location').value.split(',');
+            const payload = {
+                ip: document.getElementById('ip').value,
+                fingerprint: document.getElementById('fp').value,
+                lat: lat,
+                lon: lon
+            };
+
+            const response = await fetch('/api/verify', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            
+            const data = await response.json();
+            renderResponse(data);
+        }
+
+        function renderResponse(data) {
+            const card = document.getElementById('result-card');
+            const verdict = document.getElementById('verdict-text');
+            const scoreText = document.getElementById('score-text');
+            const scoreBar = document.getElementById('score-bar');
+            const reasons = document.getElementById('reasons-list');
+
+            card.classList.remove('hidden');
+            scoreText.innerText = data.risk_score;
+            scoreBar.style.width = data.risk_score + '%';
+            
+            reasons.innerHTML = data.reasons.map(r => `
+                <div class="flex items-center text-[11px] text-zinc-400">
+                    <span class="w-1.5 h-1.5 bg-zinc-600 rounded-full mr-2"></span>
+                    ${r}
+                </div>
+            `).join('');
+
+            if (data.action === 'GRANT') {
+                verdict.innerText = "+ ACCESS_GRANTED";
+                verdict.className = "text-2xl font-bold text-emerald-400";
+                scoreBar.className = "h-full bg-emerald-500 transition-all duration-1000";
+                document.getElementById('details-text').innerText = "Вход разрешен. Аномалий не обнаружено.";
+            } else {
+                verdict.innerText = "- ACCESS_DENIED";
+                verdict.className = "text-2xl font-bold text-red-500";
+                scoreBar.className = "h-full bg-red-600 transition-all duration-1000";
+                document.getElementById('details-text').innerText = "Требуется дополнительная верификация или блокировка.";
+            }
+        }
+    </script>
+</body>
+</html>
